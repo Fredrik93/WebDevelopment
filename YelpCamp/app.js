@@ -1,93 +1,63 @@
-var express     = require("express"),
-    app         = express(),
-    bodyParser  = require("body-parser"),
-    mongoose    = require("mongoose")
+var express = require("express"),
+    app = express(),
+    bodyParser = require("body-parser"),
+    mongoose = require("mongoose"),
+    flash = require("connect-flash"),
+    passport = require("passport"),
+    LocalStrategy = require("passport-local"),
+    methodOverride = require("method-override"),
+    Campground = require("./models/campground"),
+    Comment = require("./models/comment"),
+    User = require("./models/user"),
+    seedDB = require("./seeds")
 
-mongoose.connect("mongodb://localhost/yelp_camp", {
-    useNewUrlParser: true
-});
-app.use(bodyParser.urlencoded({extended: true}));
-app.set("view engine", "ejs");
+//requiring routes
 
-// SCHEMA SETUP
-var campgroundSchema = new mongoose.Schema({
-   name: String,
-   image: String,
-   description: String
-});
+var port = process.env.PORT || 8080;
+var commentRoutes = require("./routes/comments"),
+    campgroundRoutes = require("./routes/campgrounds"),
+    indexRoutes = require("./routes/index")
 
-var Campground = mongoose.model("Campground", campgroundSchema);
-
-// Campground.create(
-//      {
-//          name: "Granite Hill", 
-//          image: "https://farm1.staticflickr.com/60/215827008_6489cd30c3.jpg",
-//          description: "This is a huge granite hill, no bathrooms.  No water. Beautiful granite!"
-         
-//      },
-//      function(err, campground){
-//       if(err){
-//           console.log(err);
-//       } else {
-//           console.log("NEWLY CREATED CAMPGROUND: ");
-//           console.log(campground);
-//       }
-//     });
-
+    console.log(process.env.DATABASEURL);
+    var url = process.env.DATABASEURL || "mongodb://localhost/yelp_camp"
+ mongoose.connect(url, {
     
-app.get("/", function(req, res){
-    res.render("landing");
+useNewUrlParser: true
 });
 
-//INDEX - show all campgrounds
-app.get("/campgrounds", function(req, res){
-    // Get all campgrounds from DB
-    Campground.find({}, function(err, allCampgrounds){
-       if(err){
-           console.log(err);
-       } else {
-          res.render("index",{campgrounds:allCampgrounds});
-       }
-    });
+app.use(bodyParser.urlencoded({ extended: true }));
+app.set("view engine", "ejs");
+app.use(express.static(__dirname + "/public"));
+app.use(methodOverride("_method"));
+app.use(flash());
+//seed the database 
+//seedDB();
+
+// PASSPORT CONFIGURATION
+app.use(require("express-session")({
+    secret: "Once again Rusty wins cutest dog!",
+    resave: false,
+    saveUninitialized: false
+}));
+app.use(passport.initialize());
+app.use(passport.session());
+passport.use(new LocalStrategy(User.authenticate()));
+passport.serializeUser(User.serializeUser());
+passport.deserializeUser(User.deserializeUser());
+
+app.use(function (req, res, next) {
+    res.locals.currentUser = req.user;
+    res.locals.error = req.flash("error");
+    res.locals.success = req.flash("success");
+    next();
 });
 
-//CREATE - add new campground to DB
-app.post("/campgrounds", function(req, res){
-    // get data from form and add to campgrounds array
-    var name = req.body.name;
-    var image = req.body.image;
-    var desc = req.body.description;
-    var newCampground = {name: name, image: image, description: desc}
-    // Create a new campground and save to DB
-    Campground.create(newCampground, function(err, newlyCreated){
-        if(err){
-            console.log(err);
-        } else {
-            //redirect back to campgrounds page
-            res.redirect("/campgrounds");
-        }
-    });
+app.use("/", indexRoutes);
+app.use("/campgrounds", campgroundRoutes);
+app.use("/campgrounds/:id/comments", commentRoutes);
+
+
+app.listen(port, function() {
+    console.log('Our app is running on http://localhost:' + port);
 });
 
-//NEW - show form to create new campground
-app.get("/campgrounds/new", function(req, res){
-   res.render("new.ejs"); 
-});
-
-// SHOW - shows more info about one campground
-app.get("/campgrounds/:id", function(req, res){
-    //find the campground with provided ID
-    Campground.findById(req.params.id, function(err, foundCampground){
-        if(err){
-            console.log(err);
-        } else {
-            //render show template with that campground
-            res.render("show", {campground: foundCampground});
-        }
-    });
-})
-
-
-app.listen(3000, function () {
-    console.log(" up and running yo ")
-});
